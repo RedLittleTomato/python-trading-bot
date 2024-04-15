@@ -1,0 +1,9 @@
+{
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": [
+    "--indent_size=2"
+  ],
+  "python.autoComplete.extraPaths": [
+    "D:\Documents\Python\Lib\site-packages",
+  ],
+}
