@@ -18,22 +18,23 @@ symbol_list = [
 ]
 
 trading_robot = Robot()
-
 instruments_ids = trading_robot.get_instrument_ids_by_list(symbol_list=symbol_list)
 # instruments_ids = trading_robot.get_instrument_ids_by_type(instrument_type='currencies')
+historical_candles = trading_robot.grab_historical_candles(period='4H', data_count=2)
+stock_frame = trading_robot.create_stock_frame()
 
-historical_candles = trading_robot.grab_historical_candles(period='4H')
-# historical_candles = trading_robot.grab_historical_candles(instrument_ids=[18], period='4H')
-
-stock_frame = trading_robot.create_stock_frame(data=historical_candles)
 indicator_client = Indicators(price_data_frame=stock_frame)
 
 strategies = Strategies(price_data_frame=stock_frame, indicator_client=indicator_client)
 strategies.dl_strategy()
+strategies.backtest_strategy()
 
 # indicator_client.refresh()
 
-trading_robot.print_latest_stock_frame()
+# trading_robot.print_latest_stock_frame()
 
-# print(stock_frame.frame)
+# print all rows and only 6 decimal points
+pd.set_option('display.max_rows', None)
+pd.set_option('display.precision', 6)
+print(stock_frame.frame)
 

@@ -149,12 +149,47 @@ class Strategies():
   
   def dl_strategy_algo(self) -> pd.DataFrame:
 
-    # dl_trend
-    self._frame['dl_trend'] = np.where(self._frame['ema_10'] > self._frame['ema_20'], 1, -1)
+    # trend
+    self._frame['trend'] = np.where(self._frame['ema_10'] > self._frame['ema_20'], 1, -1)
+
+    # dl trend
+    self._frame['dl_trend'] = np.where((self._frame['low'] > self._frame['ema_10'])  & (self._frame['low'] > self._frame['ema_20']) & 
+                                       (self._frame['high'] > self._frame['ema_10']) & (self._frame['high'] > self._frame['ema_20']), 1,
+                              np.where((self._frame['low'] < self._frame['ema_10']) & (self._frame['low'] < self._frame['ema_20']) & 
+                                       (self._frame['high'] < self._frame['ema_10']) & (self._frame['high'] < self._frame['ema_20']), -1, 0))
+
+    # calculate slope
+    self._frame['slope'] = self._frame['ema_10'].diff()
+
+    # calculate slope standard deviation 
+    self._frame['slope_std'] = self._frame['slope'].rolling(window=10).std()
+
+    # calculate standardized slope
+    self._frame['standardized_slope'] = self._frame['slope'] / self._frame['slope_std']
+
+    # calculate angle
+    self._frame['angle'] = np.degrees(np.arctan(self._frame['standardized_slope']))
+
+    # optimized dl trend
+    self._frame['opt_dl_trend'] = np.where((self._frame['dl_trend'] == 1)  & (self._frame['angle'] > 45), 1, 
+                                  np.where((self._frame['dl_trend'] == -1) & (self._frame['angle'] < -45), -1, 0))
+
+    # Check signals
+    # ent_sig - get the first signal from the opt_dl_trend
+    # ext_sig - get the first signal when trend change
+    self._frame['ent_sig'] = np.where(self._frame['opt_dl_trend'] == self._frame['opt_dl_trend'].diff(), self._frame['opt_dl_trend'], 0)
+    self._frame['ext_sig'] = np.where((self._frame['dl_trend'] != self._frame['dl_trend'].shift(1)) & (self._frame['dl_trend'] != 0), -self._frame['dl_trend'], 0)
+
+    self._frame['tp'] = 0
+    self._frame['sl'] = np.where(self._frame['ent_sig'] != 0, self._frame['ema_10'], 0)
+
+    # # Rename
+    # self._frame['signal'] = np.where(self._frame['signal'] == 1.0, 'buy', 
+    #                         np.where(self._frame['signal'] == -1.0, 'sell', '-'))
 
     # Clean up before sending back.
     self._frame.drop(
-      labels=[],
+      labels=['slope', 'slope_std', 'standardized_slope'],
       axis=1,
       inplace=True
     )
@@ -181,15 +216,9 @@ class Strategies():
     return conditions
 
   # TODO: Double Check
-  def backtest_strategy(self, multiple_trade: bool = False, atr: bool = False) -> None:
+  def backtest_strategy(self, multiple_trade: bool = False) -> None:
 
-    print('Backtesting ...')
-
-    # Move the signal to the next row
-    self._frame['signal'] = self._frame['signal'].shift(1)
-
-    # Remove the first row due to no signal
-    self._frame.drop(self._frame.head(1).index, inplace=True)
+    print('\nBacktesting strategy ==> ' + self._strategy_name)
 
     # Create results in dataframe type
     results = pd.DataFrame(columns=[
@@ -206,414 +235,134 @@ class Strategies():
       'profit_1',     # total money earned
       'win_rate_2',   # win rate of the total win and loss (remain counted as loss)
       'profit_2',     # total money earned
-    ])
+    ])      
 
-    # For each earn pct
-    for i in range(1, 10): # from 1.001 to 1.009
+    # Create result dict
+    result = {}
+    result['open'] = 0
+    result['miss'] = 0
+    result['win'] = 0
+    result['loss'] = 0
+    result['open/close'] = 0
+    result['win/loss'] = 0
+    result['remain'] = 0
 
-      # For each loss pct
-      for j in range(1, 10):
-        
-        # Set profit and loss percentage
-        if atr:
-          earn_ratio = 1 + ((i - 1))
-          loss_ratio = 1 + ((j - 1))
-        else:
-          earn_ratio = 1 + (i / 1000)
-          loss_ratio = 1 + (j / 1000)
-
-        # Create result dict
-        result = {}
-        result['open'] = 0
-        result['miss'] = 0
-        result['win'] = 0
-        result['loss'] = 0
-        result['open/close'] = 0
-        result['win/loss'] = 0
-        result['remain'] = 0
-
-        # For each symbol
-        for symbol, group in self._stock_frame.symbol_groups: # symbol = '18 - gold'
-
-          positions = []
-
-          # For each row / candle in dataframe
-          for index, candle in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
-           
-            # Check signal
-            if candle['signal'] != '-':
-
-              open_trade = False
-
-              # Check able to open multiple positions
-              if multiple_trade:
-                open_trade = True
-              else:
-
-                # Check has opened position anot
-                if len(positions) == 0:
-                  open_trade = True
-                else:
-                  result['miss'] += 1
-
-              # If able to open position
-              if open_trade:
-
-                # Create position
-                position = {}
-                position['fromdate'] = index[1]
-
-                # Set take profit and stop loss
-                if atr:
-                  if candle['signal'] == 'buy':
-                    position['tp'] = candle['open'] + (candle['atr'] * earn_ratio)
-                    position['sl'] = candle['open'] - (candle['atr'] * loss_ratio)
-                  else:
-                    position['tp'] = candle['open'] - (candle['atr'] * earn_ratio)
-                    position['sl'] = candle['open'] + (candle['atr'] * loss_ratio)
-
-                else:
-                  if candle['signal'] == 'buy':
-                    position['tp'] = candle['open'] * earn_ratio
-                    position['sl'] = candle['open'] / loss_ratio
-                  else:
-                    position['tp'] = candle['open'] / earn_ratio
-                    position['sl'] = candle['open'] * loss_ratio
-
-                # Add position to positions
-                positions.append(position)
-                result['open'] += 1
-            
-            ## Check positions met tp and ls
-
-            # Check position is empty
-            if positions:
-              
-              # For each position opened
-              for position in positions:
-
-                # Check does the position met the tp and sl
-                current_time = index[1]
-                current_high = candle['high']
-                current_low  = candle['low']
-
-                # Conditions
-                win = False
-                loss = False
-
-                # Win
-                if current_low < position['tp'] < current_high:
-                  result['win'] += 1
-                  win = True
-
-                # Loss
-                if current_low < position['sl'] < current_high:
-                  result['loss'] += 1
-                  loss = True
-
-                # Win or loss met
-                if win | loss:
-
-                  # Check does the position open and close in the same candle
-                  if position['fromdate'] == current_time:
-                    result['open/close'] += 1
-
-                  # Remove (close) the position in positions
-                  positions.remove(position)
-
-                # Both win and loss met
-                if win & loss:
-                  result['win/loss'] += 1
-
-          # The remain positions havent close yet
-          result['remain'] += int(len(positions))
-
-        # Add each symbol results togather
-        results = results.append({
-          'earn_ratio':   earn_ratio,
-          'loss_ratio':   loss_ratio,
-          
-          'open':         result['open'],
-          'miss':         result['miss'],
-          'win':          result['win'],
-          'loss':         result['loss'],
-          'open/close':   result['open/close'],
-          'win/loss':     result['win/loss'],
-          'remain':       result['remain'],
-
-          'win_rate_1':   str(round(result['win'] / result['open'] * 100, 2)) + '%',
-          'profit_1':     (result['win'] * i) - (result['loss'] * j),
-
-          'win_rate_2':   str(round(result['win'] / (result['win'] + result['loss'] + result['remain']) * 100, 2)) + '%',
-          'profit_2':     (result['win'] * i) - ((result['loss'] + result['remain']) * j),    
-        }, ignore_index = True)
-
-    # Print results
-    results = results.set_index(keys=['earn_ratio', 'loss_ratio'])
-    print("=" * 100)
-    print('Backtest Result')
-    print("=" * 100)
-    print(f'Strategy:       {self._strategy_name}')
-    print(f'Multiple trade: {multiple_trade}')
-    print(f'Atr used:       {atr}')
-    print("-" * 100)
-    print(results)
-    print("-" * 100)
-    
-    return results
-  def new_backtest_strategy(self, trading_budget: int = 50, leverage: int = 1, multiple_trade: bool = False, risk_ratio: str = '1:1', print_result: bool = True) -> pd.DataFrame:
-
-    print(f'Backtesting ==> {self._strategy_name} ...')
-
-    # Define earn and loss ratio
-    earn_ratio = float(risk_ratio.split(':')[0])
-    loss_ratio = float(risk_ratio.split(':')[1])
-
-    # Create results in dataframe
-    results = pd.DataFrame(columns=[
-      'symbol',           # each symbols
-      'open',             # total number of positions opened
-      'miss',             # total number of positions didnt opened due to not able multiple positions
-      'multi',            # total number of position opening when there is other positions opened
-      'highest',          # highest record of opened positions number
-      'win',              # total number of opened positions that earn money
-      'loss',             # total number of opened positions that lost money
-      'open/close',       # total number of positions that open and close in the same candle
-      'win/loss',         # total number of positions that win and loss in the same candle
-      'remain',           # total number of opened positions do not have results
-      'win_rate',         # win rate of the total win and loss
-      'earn',             # total money earn
-      'lost',             # total money lost
-      'profit/loss',      # total money earned (trade with same trading budget)
-      'equity',           # final money
-    ])
-
-    # For each symbol
     for symbol, group in self._stock_frame.symbol_groups: # symbol = '18 - gold'
+      print('Backtesting ==> ' + symbol)
 
-      # Move all signals to the next row
-      group['signal']      = group['signal'].shift(1)
-      group['stop_loss']   = group['stop_loss'].shift(1)   if 'stop_loss' in group else 0
-      group['take_profit'] = group['take_profit'].shift(1) if 'take_profit' in group else 0
-      group['stop_signal'] = group['stop_signal'].shift(1) if 'stop_signal' in group else '-'
-      group['atr']         = group['atr'].shift(1)         if 'atr' in group else 0
+      # Move the entry signal to the next row
+      group['ent_sig'] = group['ent_sig'].shift(1)
 
       # Remove the first row due to no signal
-      group.drop(group.head(14).index, inplace=True)
-
-      # Create result dict of this symbol
-      result = {}
-      result['open'] = 1
-      result['miss'] = 0
-      result['multi'] = 0
-      result['highest'] = 0
-      result['win'] = 0
-      result['loss'] = 0
-      result['profit/loss'] = 0
-      result['open/close'] = 0
-      result['earn'] = 0
-      result['lost'] = 0
-      result['win/loss'] = 0
-      result['remain'] = 0
-
-      # Create positions slot
-      positions = []
-      ongoing_trading_budget = trading_budget
+      group.drop(group.head(1).index, inplace=True)
 
       # For each row / candle in dataframe
-      for index, candle in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
+      for index, frame in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
+        print(frame)
+
+        if frame['ent_sig'] == 0: continue
+
+        print(1)
+
         
-        # Skip this candle is no signal and opened positions
-        if candle['signal'] == '-' and not positions:
-          continue
 
-        open_trade = False
+    # # For each symbol
+    # for symbol, group in self._stock_frame.symbol_groups: # symbol = '18 - gold'
 
-        # Check signal
-        if candle['signal'] != '-':
+    #   positions = []
 
-          open_trade = True
-
-          # Check able multiple trade and have opened position
-          if not multiple_trade and len(positions) > 0:
-
-            open_trade = False
-            result['miss'] += 1
+    #   # For each row / candle in dataframe
+    #   for index, frame in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
         
-        # If positions not empty
-        if positions:
+    #     # Check signal
+    #     if frame['ent_sig'] != 0:
 
-          current_time = index[1]
-          current_high = candle['high']
-          current_low  = candle['low']
+    #       open_trade = False
 
-          # Get the highest record of opened positions number
-          if len(positions) > result['highest']:
-            result['highest'] = len(positions)
+    #       # Check able to open multiple positions
+    #       if multiple_trade:
+    #         open_trade = True
+    #       else:
 
-          # For each position opened
-          for position in positions:
+    #         # Check has opened position anot
+    #         if len(positions) == 0:
+    #           open_trade = True
+    #         else:
+    #           result['miss'] += 1
 
-            # Check conditions
-            win = False
-            loss = False
-            profit_loss = 0
+    #       # If able to open position
+    #       if open_trade:
 
-            # Win
-            if current_low < position['tp'] < current_high:
-              result['profit/loss']  += abs((position['open'] - position['tp']) * position['units_1'])
-              ongoing_trading_budget += abs((position['open'] - position['tp']) * position['units_2'])
-              result['win'] += 1
-              result['earn'] += abs((position['open'] - position['tp']) * position['units_1'])
-              profit_loss = abs((position['open'] - position['tp']) * position['units_1'])
-              win = True
+    #         # Create position
+    #         position = {}
+    #         position['fromdate'] = index[1]
 
-            # Loss
-            if current_low < position['sl'] < current_high:
-              result['profit/loss']  -= abs((position['open'] - position['sl']) * position['units_1'])
-              ongoing_trading_budget -= abs((position['open'] - position['sl']) * position['units_2'])
-              result['loss'] += 1
-              result['lost'] -= abs((position['open'] - position['sl']) * position['units_1'])
-              profit_loss = -abs((position['open'] - position['sl']) * position['units_1'])
-              loss = True
+    #         # Set take profit and stop loss
+    #         position['tp'] = frame['tp']
+    #         position['sl'] = frame['sl']
 
-            # Both win and loss met
-            if win & loss:
-              result['win/loss'] += 1
-
-            # Win or loss met
-            if win | loss:
-
-              print(f"{position['datetime']} ==> {current_time} ({position['action']}) {profit_loss}")
-
-              # Check does the position open and close in the same candle
-              if position['datetime'] == current_time:
-                result['open/close'] += 1
-
-              # Remove (close) the position in positions
-              positions.remove(position)
+    #         # Add position to positions
+    #         positions.append(position)
+    #         result['open'] += 1
         
-        # Check stop signal
-        if candle['stop_signal'] != '-' and positions:
-
-          current_time = index[1]
-          current_open = candle['open']
-          current_high = candle['high']
-          current_low  = candle['low']
-
-          # For each position opened
-          for position in positions:
-
-            closed = False
-            profit_loss = 0
-
-            if position['action'] == 'buy' and (candle['stop_signal'] == 'buy_stop' or candle['stop_signal'] == 'stop'):
-
-              profit_loss = (current_open - position['open']) * position['units_1']
-              ongoing_trading_budget += (current_open - position['open']) * position['units_2']
-              result['profit/loss'] += profit_loss
-              closed = True
-
-            if position['action'] == 'sell' and (candle['stop_signal'] == 'sell_stop' or candle['stop_signal'] == 'stop'):
-
-              profit_loss = (position['open'] - current_open) * position['units_1']
-              ongoing_trading_budget += (position['open'] - current_open) * position['units_2']
-              result['profit/loss'] += profit_loss
-              closed = True
-
-            if profit_loss > 0:
-              result['earn'] += profit_loss
-            else:
-              result['lost'] += profit_loss
-            
-            print(f"{position['datetime']} ==> {current_time} ({position['action']}) {profit_loss}")
-
-            # Remove (close) the position in positions
-            if closed:
-
-              # Check does the position open and close in the same candle
-              if position['datetime'] == current_time:
-                result['open/close'] += 1
-              
-              # Check profit loss
-              if profit_loss > 0:
-                result['win'] += 1
-              else:
-                result['loss'] += 1
-              positions.remove(position)
-              
-        # Open position
-        if open_trade:
-
-          # Create position
-          position = {}
-          position['datetime'] = index[1]
-          position['action'] = candle['signal']
-          position['open'] = candle['open']
-          position['units_1'] = trading_budget * leverage / candle['open']
-          position['units_2'] = ongoing_trading_budget * leverage / candle['open']
+    #     ## Check positions met tp and ls
+    #     # Check position is empty
+    #     if positions:
           
-          # Set take profit and stop loss
-          if position['action'] == 'buy':
-            if candle['take_profit'] == 0 and candle['atr']:
-              candle['take_profit'] = candle['open'] + (candle['atr'] * earn_ratio)
-            if candle['stop_loss'] == 0 and candle['atr']:
-              candle['stop_loss'] = candle['open'] - (candle['atr'] * loss_ratio)
-          else:
-            if candle['take_profit'] == 0 and candle['atr']:
-              candle['take_profit'] = candle['open'] - (candle['atr'] * earn_ratio)
-            if candle['stop_loss'] == 0 and candle['atr']:
-              candle['stop_loss'] = candle['open'] + (candle['atr'] * loss_ratio)
+    #       # For each position opened
+    #       for position in positions:
 
-          position['tp'] = float(candle['take_profit'])
-          position['sl'] = float(candle['stop_loss'])
+    #         # Check does the position met the tp and sl
+    #         current_time = index[1]
+    #         current_high = frame['high']
+    #         current_low  = frame['low']
 
-          # Add position to positions
-          positions.append(position)
-          result['open'] += 1
+    #         # Conditions
+    #         win = False
+    #         loss = False
 
-          # Position opened when there are other opened positions
-          if len(positions) > 1:
-            result['multi'] += 1
-        
-      # The remain positions havent close yet
-      result['remain'] += int(len(positions))
+    #         # Win
+    #         if current_low < position['tp'] < current_high:
+    #           result['win'] += 1
+    #           win = True
 
-      # Add each symbol results togather
-      results = results.append({
-        'symbol':         symbol,
-        'open':           result['open'],
-        'miss':           result['miss'],
-        'multi':          result['multi'],
-        'highest':        result['highest'],
-        'win':            result['win'],
-        'loss':           result['loss'],
-        'open/close':     result['open/close'],
-        'win/loss':       result['win/loss'],
-        'remain':         result['remain'],
-        'earn':           result['earn'],
-        'lost':           result['lost'],
-        'win_rate':       str(round(result['win'] / result['open'] * 100, 2)) + '%',
-        'profit/loss':    result['profit/loss'],
-        'equity':         (ongoing_trading_budget - trading_budget) / leverage
-      }, ignore_index = True)
+    #         # Loss
+    #         if current_low < position['sl'] < current_high:
+    #           result['loss'] += 1
+    #           loss = True
 
-    # Print results
-    if print_result:
+    #         # Win or loss met
+    #         if win | loss:
 
-      results = results.set_index(keys=['symbol'])
-      print("=" * 100)
-      print('Backtest Result')
-      print("=" * 100)
-      print(f'Strategy:       {self._strategy_name}')
-      print(f'Period:         {self._period}')
-      print(f'Trading budget: {trading_budget}')
-      print(f'Leverage:       x{leverage}')
-      print(f'Earn ratio:     {earn_ratio}')
-      print(f'Loss ratio:     {loss_ratio}')
-      print("-" * 100)
-      print(results)
-      print("-" * 100)
-      print('Total earn: {}'.format(results['profit/loss'].sum()))
+    #           # Check does the position open and close in the same candle
+    #           if position['fromdate'] == current_time:
+    #             result['open/close'] += 1
+
+    #           # Remove (close) the position in positions
+    #           positions.remove(position)
+
+    #         # Both win and loss met
+    #         if win & loss:
+    #           result['win/loss'] += 1
+
+    #   # The remain positions havent close yet
+    #   result['remain'] += int(len(positions))
+
+    # Add each symbol results togather
+    # result['open'] = 0
+    # result['miss'] = 0
+    # result['win'] = 0
+    # result['loss'] = 0
+
+    # # Print results
+    # results = results.set_index(keys=['earn_ratio', 'loss_ratio'])
+    # print("=" * 100)
+    # print('Backtest Result')
+    # print("=" * 100)
+    # print(f'Strategy:       {self._strategy_name}')
+    # print(f'Multiple trade: {multiple_trade}')
+    # print("-" * 100)
+    # print(results)
+    # print("-" * 100)
     
     return results

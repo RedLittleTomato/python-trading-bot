@@ -14,6 +14,7 @@ from datetime import timedelta
 from typing import List
 from typing import Dict
 from typing import Union
+from typing import Optional
 
 from stock_frame import StockFrame
 
@@ -21,16 +22,29 @@ class Robot():
 
   def __init__(self) -> None:
 
-    self.instrument_ids = []
+    self.stock_frame: StockFrame = None
     self.period = None
     self.period_text = None
-    self.stock_frame: StockFrame = None
+    self.instrument_type = None
+    self.instrument_ids = []
+    self.historical_candles = []
     self.instruments_metadata = self._instruments_metadata()
 
-  def create_stock_frame(self, data: List[dict]) -> StockFrame:
+  def create_stock_frame(self, data: Optional[List[dict]] = None) -> StockFrame:
+
+    # Use self.historical_candles if no data is provided.
+    if data is None:
+       data = self.historical_candles
 
     # Create the Frame.
     self.stock_frame = StockFrame(data=data, period=self.period)
+
+    # # Clean up volume as it is None.
+    # self.stock_frame._frame.drop(
+    #   labels=['volume'],
+    #   axis=1,
+    #   inplace=True
+    # )
 
     return self.stock_frame
 
@@ -88,8 +102,8 @@ class Robot():
   def get_instrument_ids_by_list(self, symbol_list: List[str]) -> List[int]:
 
     instrument_ids = []
-    # symbol_list = [symbol.lower() for symbol in symbol_list]
 
+    # find all the instrument ids from metadata
     for instrument in self.instruments_metadata:
       if any(instrument['symbolfull'] == symbol.lower() for symbol in symbol_list):
         instrument_ids.append(int(instrument['instrumentid']))
@@ -99,13 +113,14 @@ class Robot():
 
     return instrument_ids
   
-  def fetch_candles_from_etoro(self, instrument_id: str, data_count: int = 1000) -> dict:
+  def fetch_candles_from_etoro(self, instrument_id: str, data_count: int) -> dict:
     # fetch the candles data from etoro api
     url = "https://candle.etoro.com/candles/asc.json/{period}/{data_count}/{instrument_id}".format(
       period = self.period_text,
       data_count = data_count,
       instrument_id = instrument_id
     )
+    print('Fetching ==> ' + url)
     res = requests.get(url)
 
     # get the candles data from response
@@ -129,7 +144,11 @@ class Robot():
 
       return candles
 
-  def grab_historical_candles(self, period: str) -> List[dict]:
+  def grab_historical_candles(self, instrument_ids: List[int] = None, period: str = "1D", data_count: int = 1000) -> List[dict]:
+
+    # Use self.historical_candles if no data is provided.
+    if instrument_ids is None:
+       instrument_ids = self.instrument_ids
 
     period_list = {
       '1M': 'oneminute',
@@ -151,12 +170,15 @@ class Robot():
 
     historical_candles = []
 
-    print('Grabing historical candles...')
-    for instrument_id in self.instrument_ids:
+    print('\nFetching historical candles (' + period + ') ...')
+    for instrument_id in instrument_ids:
 
-        candles = self.fetch_candles_from_etoro(instrument_id=instrument_id)
+        candles = self.fetch_candles_from_etoro(instrument_id=instrument_id, data_count=data_count)
 
         historical_candles.extend(candles)
+
+    # update self historical_candles
+    self.historical_candles = historical_candles
       
     return historical_candles
   
