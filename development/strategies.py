@@ -130,9 +130,13 @@ class Strategies():
     self._frame['ent_sig'] = 0
     self._frame['ext_sig'] = 0
 
-    # take profit and stop loss
-    self._frame['tp'] = 0
-    self._frame['sl'] = 0
+    # set take profit and stop loss
+    self._frame['set_tp'] = 0
+    self._frame['set_sl'] = 0
+
+    # update take profit and stop loss
+    self._frame['upd_tp'] = 0
+    self._frame['upd_sl'] = 0
 
     # Rename
     # self._frame['ent_sig'] = np.where(self._frame['ent_sig'] == 1.0, 'buy', 
@@ -161,16 +165,20 @@ class Strategies():
   def ema_strategy_algo(self) -> pd.DataFrame:
 
     # check crossover
-    self._frame['trend'] = np.where(self._frame['ema_10'] > self._frame['ema_20'], -1, 1)
+    self._frame['trend'] = np.where(self._frame['ema_10'] > self._frame['ema_20'], 1, -1)
     self._frame['cross'] = self._frame.groupby('instrumentid')['trend'].diff()
 
     # signals
     self._frame['ent_sig'] = np.where((~self._frame['cross'].isna()) & (self._frame['cross'] != 0), self._frame['trend'], 0)
     self._frame['ext_sig'] = self._frame.groupby('instrumentid')['trend'].shift().where((~self._frame['cross'].isna()) & (self._frame['cross'] != 0), 0)
 
-    # take profit and stop loss
-    self._frame['tp'] = 0
-    self._frame['sl'] = 0
+    # set take profit and stop loss
+    self._frame['set_tp'] = 0
+    self._frame['set_sl'] = 0
+
+    # update take profit and stop loss
+    self._frame['upd_tp'] = 0
+    self._frame['upd_sl'] = 0
 
     # Clean up before sending back.
     self._frame.drop(
@@ -229,10 +237,6 @@ class Strategies():
     self._frame['tp'] = 0
     self._frame['sl'] = np.where(self._frame['ent_sig'] != 0, self._frame['ema_10'], 0)
 
-    # # Rename
-    # self._frame['signal'] = np.where(self._frame['signal'] == 1.0, 'buy', 
-    #                         np.where(self._frame['signal'] == -1.0, 'sell', '-'))
-
     # Clean up before sending back.
     self._frame.drop(
       labels=['slope', 'slope_std', 'standardized_slope'],
@@ -281,10 +285,10 @@ class Strategies():
     missed_trades = []
 
     # Shift the signals to next row within each group
-    # self._frame['ent_sig'] = self._frame.groupby('instrumentid')['ent_sig'].shift(1)
-    # self._frame['ext_sig'] = self._frame.groupby('instrumentid')['ext_sig'].shift(1)
-    # self._frame['tp'] = self._frame.groupby('instrumentid')['tp'].shift(1)
-    # self._frame['sl'] = self._frame.groupby('instrumentid')['sl'].shift(1)
+    self._frame['ent_sig'] = self._frame.groupby('instrumentid')['ent_sig'].shift(1)
+    self._frame['ext_sig'] = self._frame.groupby('instrumentid')['ext_sig'].shift(1)
+    self._frame['set_tp']  = self._frame.groupby('instrumentid')['set_tp'].shift(1)
+    self._frame['set_sl']  = self._frame.groupby('instrumentid')['set_sl'].shift(1)
 
     # Initialize positions dict
     for instrumentid in self._frame.index.get_level_values('instrumentid').unique():

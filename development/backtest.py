@@ -5,15 +5,15 @@ from indicators import Indicators
 from strategies import Strategies
 
 symbol_list = [
-  # 'USDCAD',	'EURJPY',
-  # 'EURUSD',	'EURCHF',
-  # 'USDCHF',	'EURGBP',
-  # 'GBPUSD',	'AUDCAD',
-  # 'NZDUSD',	'GBPCHF',
-  # 'AUDUSD',	'GBPJPY',
-  # 'USDJPY',	'CHFJPY',
-  # 'EURCAD',	'AUDJPY',
-  # 'EURAUD',	'AUDNZD',
+  'USDCAD',	'EURJPY',
+  'EURUSD',	'EURCHF',
+  'USDCHF',	'EURGBP',
+  'GBPUSD',	'AUDCAD',
+  'NZDUSD',	'GBPCHF',
+  'AUDUSD',	'GBPJPY',
+  'USDJPY',	'CHFJPY',
+  'EURCAD',	'AUDJPY',
+  'EURAUD',	'AUDNZD',
   'GOLD', 'SILVER'
 ]
 
@@ -28,7 +28,7 @@ indicator_client = Indicators(price_data_frame=stock_frame)
 strategies = Strategies(price_data_frame=stock_frame, indicator_client=indicator_client)
 strategies.ema_strategy()
 # strategies.dl_strategy()
-strategies.backtest_strategy(position_pct=10, leverage=1)
+strategies.backtest_strategy(position_pct=5, leverage=1)
 
 # indicator_client.refresh()
 
