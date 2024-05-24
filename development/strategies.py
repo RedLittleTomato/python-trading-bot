@@ -117,7 +117,7 @@ class Strategies():
   def sample_strategy(self) -> None:
 
     # Indicators
-    self.sample_strategy()
+    self._indicator_client.ema(period=10,column_name='ema_10')
 
     # Strategy
     self._strategy_name = 'sample_strategy'
@@ -125,6 +125,52 @@ class Strategies():
 
     self._indicator_client.implement_strategy(column_name=self._strategy_name, strategy=self._strategy_algo)
   def sample_strategy_algo(self) -> pd.DataFrame:
+
+    # signals
+    self._frame['ent_sig'] = 0
+    self._frame['ext_sig'] = 0
+
+    # take profit and stop loss
+    self._frame['tp'] = 0
+    self._frame['sl'] = 0
+
+    # Rename
+    # self._frame['ent_sig'] = np.where(self._frame['ent_sig'] == 1.0, 'buy', 
+    #                          np.where(self._frame['ent_sig'] == -1.0, 'sell', '-'))
+
+    # Clean up before sending back.
+    self._frame.drop(
+      labels=[],
+      axis=1,
+      inplace=True
+    )
+
+    return self._frame
+
+  def ema_strategy(self) -> None:
+
+    # Indicators
+    self._indicator_client.ema(period=10,column_name='ema_10')
+    self._indicator_client.ema(period=20,column_name='ema_20')
+
+    # Strategy
+    self._strategy_name = 'ema_strategy'
+    self._strategy_algo = self.ema_strategy_algo()
+
+    self._indicator_client.implement_strategy(column_name=self._strategy_name, strategy=self._strategy_algo)
+  def ema_strategy_algo(self) -> pd.DataFrame:
+
+    # check crossover
+    self._frame['trend'] = np.where(self._frame['ema_10'] > self._frame['ema_20'], -1, 1)
+    self._frame['cross'] = self._frame.groupby('instrumentid')['trend'].diff()
+
+    # signals
+    self._frame['ent_sig'] = np.where((~self._frame['cross'].isna()) & (self._frame['cross'] != 0), self._frame['trend'], 0)
+    self._frame['ext_sig'] = self._frame.groupby('instrumentid')['trend'].shift().where((~self._frame['cross'].isna()) & (self._frame['cross'] != 0), 0)
+
+    # take profit and stop loss
+    self._frame['tp'] = 0
+    self._frame['sl'] = 0
 
     # Clean up before sending back.
     self._frame.drop(
@@ -146,7 +192,6 @@ class Strategies():
     self._strategy_algo = self.dl_strategy_algo()
 
     self._indicator_client.implement_strategy(column_name=self._strategy_name, strategy=self._strategy_algo)
-  
   def dl_strategy_algo(self) -> pd.DataFrame:
 
     # trend
@@ -174,12 +219,13 @@ class Strategies():
     self._frame['opt_dl_trend'] = np.where((self._frame['dl_trend'] == 1)  & (self._frame['angle'] > 45), 1, 
                                   np.where((self._frame['dl_trend'] == -1) & (self._frame['angle'] < -45), -1, 0))
 
-    # Check signals
+    # signals
     # ent_sig - get the first signal from the opt_dl_trend
     # ext_sig - get the first signal when trend change
     self._frame['ent_sig'] = np.where(self._frame['opt_dl_trend'] == self._frame['opt_dl_trend'].diff(), self._frame['opt_dl_trend'], 0)
     self._frame['ext_sig'] = np.where((self._frame['dl_trend'] != self._frame['dl_trend'].shift(1)) & (self._frame['dl_trend'] != 0), -self._frame['dl_trend'], 0)
 
+    # take profit and stop loss
     self._frame['tp'] = 0
     self._frame['sl'] = np.where(self._frame['ent_sig'] != 0, self._frame['ema_10'], 0)
 
@@ -215,154 +261,184 @@ class Strategies():
 
     return conditions
 
-  # TODO: Double Check
-  def backtest_strategy(self, multiple_trade: bool = False) -> None:
+  def backtest_strategy(self, initial_amount: int = 1000, position_pct: int = 5, leverage: int = 1) -> None:
 
-    print('\nBacktesting strategy ==> ' + self._strategy_name)
-
-    # Create results in dataframe type
-    results = pd.DataFrame(columns=[
-      'earn_ratio',   # earn ratio
-      'loss_ratio',   # loss ratio
-      'open',         # total number of positions opened
-      'miss',         # total number of positions didnt opened due to not able multiple positions
-      'win',          # total number of opened positions that earn money
-      'loss',         # total number of opened positions that lost money
-      'open/close',    # total number of positions that open and close in the same candle
-      'win/loss',     # total number of positions that win and loss in the same candle
-      'remain',       # total number of opened positions do not have results
-      'win_rate_1',   # win rate of the total win and loss
-      'profit_1',     # total money earned
-      'win_rate_2',   # win rate of the total win and loss (remain counted as loss)
-      'profit_2',     # total money earned
-    ])      
-
-    # Create result dict
-    result = {}
-    result['open'] = 0
-    result['miss'] = 0
-    result['win'] = 0
-    result['loss'] = 0
-    result['open/close'] = 0
-    result['win/loss'] = 0
-    result['remain'] = 0
-
-    for symbol, group in self._stock_frame.symbol_groups: # symbol = '18 - gold'
-      print('Backtesting ==> ' + symbol)
-
-      # Move the entry signal to the next row
-      group['ent_sig'] = group['ent_sig'].shift(1)
-
-      # Remove the first row due to no signal
-      group.drop(group.head(1).index, inplace=True)
-
-      # For each row / candle in dataframe
-      for index, frame in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
-        print(frame)
-
-        if frame['ent_sig'] == 0: continue
-
-        print(1)
-
-        
-
-    # # For each symbol
-    # for symbol, group in self._stock_frame.symbol_groups: # symbol = '18 - gold'
-
-    #   positions = []
-
-    #   # For each row / candle in dataframe
-    #   for index, frame in group.iterrows(): # index = '18 - gold', '2021-06-24t06:30:00z' ==> type tuple
-        
-    #     # Check signal
-    #     if frame['ent_sig'] != 0:
-
-    #       open_trade = False
-
-    #       # Check able to open multiple positions
-    #       if multiple_trade:
-    #         open_trade = True
-    #       else:
-
-    #         # Check has opened position anot
-    #         if len(positions) == 0:
-    #           open_trade = True
-    #         else:
-    #           result['miss'] += 1
-
-    #       # If able to open position
-    #       if open_trade:
-
-    #         # Create position
-    #         position = {}
-    #         position['fromdate'] = index[1]
-
-    #         # Set take profit and stop loss
-    #         position['tp'] = frame['tp']
-    #         position['sl'] = frame['sl']
-
-    #         # Add position to positions
-    #         positions.append(position)
-    #         result['open'] += 1
-        
-    #     ## Check positions met tp and ls
-    #     # Check position is empty
-    #     if positions:
-          
-    #       # For each position opened
-    #       for position in positions:
-
-    #         # Check does the position met the tp and sl
-    #         current_time = index[1]
-    #         current_high = frame['high']
-    #         current_low  = frame['low']
-
-    #         # Conditions
-    #         win = False
-    #         loss = False
-
-    #         # Win
-    #         if current_low < position['tp'] < current_high:
-    #           result['win'] += 1
-    #           win = True
-
-    #         # Loss
-    #         if current_low < position['sl'] < current_high:
-    #           result['loss'] += 1
-    #           loss = True
-
-    #         # Win or loss met
-    #         if win | loss:
-
-    #           # Check does the position open and close in the same candle
-    #           if position['fromdate'] == current_time:
-    #             result['open/close'] += 1
-
-    #           # Remove (close) the position in positions
-    #           positions.remove(position)
-
-    #         # Both win and loss met
-    #         if win & loss:
-    #           result['win/loss'] += 1
-
-    #   # The remain positions havent close yet
-    #   result['remain'] += int(len(positions))
-
-    # Add each symbol results togather
-    # result['open'] = 0
-    # result['miss'] = 0
-    # result['win'] = 0
-    # result['loss'] = 0
-
-    # # Print results
-    # results = results.set_index(keys=['earn_ratio', 'loss_ratio'])
-    # print("=" * 100)
-    # print('Backtest Result')
-    # print("=" * 100)
-    # print(f'Strategy:       {self._strategy_name}')
-    # print(f'Multiple trade: {multiple_trade}')
-    # print("-" * 100)
-    # print(results)
-    # print("-" * 100)
+    # Validate position_pct
+    if not (1 <= position_pct <= 100):
+        raise ValueError("position_pct must be between 1 and 100 inclusive.")
     
+    # Convert position_pct to a decimal for calculations
+    position_pct = position_pct / 100
+
+    print('\nBacktesting strategy ==> ' + self._strategy_name + ' ...\n')
+
+    # Initialize variables
+    cash_available = initial_amount
+    total_invested = 0
+    trades = []
+    pnl_series = []
+    positions = {}  # To keep track of positions by instrument
+    missed_trades = []
+
+    # Shift the signals to next row within each group
+    # self._frame['ent_sig'] = self._frame.groupby('instrumentid')['ent_sig'].shift(1)
+    # self._frame['ext_sig'] = self._frame.groupby('instrumentid')['ext_sig'].shift(1)
+    # self._frame['tp'] = self._frame.groupby('instrumentid')['tp'].shift(1)
+    # self._frame['sl'] = self._frame.groupby('instrumentid')['sl'].shift(1)
+
+    # Initialize positions dict
+    for instrumentid in self._frame.index.get_level_values('instrumentid').unique():
+      positions[instrumentid] = []
+   
+    # Sort the DataFrame by datetime to process all instruments row by row in time order
+    self._frame = self._frame.sort_values(by=['fromdate', 'instrumentid'])
+
+    # Backtest every rows 
+    for index, row in self._frame.iterrows():
+      instrumentid = index[0]
+      datetime = index[1]
+
+      # Calculate the position size based on total cash and position_pct
+      amount = (cash_available + total_invested) * position_pct
+      position_size = amount * leverage
+
+      # Check for entry signals
+      if row['ent_sig'] == 1 and cash_available >= amount:
+        # Buy long
+        entry_price = row['close']
+        cash_available -= amount
+        total_invested += amount
+        positions[instrumentid].append({
+          'instrumentid': instrumentid,
+          'type': 'long',
+          'entry_time': datetime,
+          'entry_price': entry_price,
+          'amount': amount,
+          'position_size': position_size,
+          'tp': row['tp'],
+          'sl': row['sl'],
+          'portfolio': cash_available + total_invested,
+        })
+      elif row['ent_sig'] == -1 and cash_available >= amount:
+        # Buy short
+        entry_price = row['close']
+        cash_available -= amount
+        total_invested += amount
+        positions[instrumentid].append({
+          'instrumentid': instrumentid,
+          'type': 'short',
+          'entry_time': datetime,
+          'entry_price': entry_price,
+          'amount': amount,
+          'position_size': position_size,
+          'tp': row['tp'],
+          'sl': row['sl'],
+          'portfolio': cash_available + total_invested,
+        })
+      elif row['ent_sig'] != 0:
+        # Record missed trades
+        missed_trades.append({
+          'instrumentid': instrumentid,
+          'datetime': datetime,
+          'ent_sig': row['ent_sig']
+        })
+
+      # Check for exit signals
+      current_positions = positions[instrumentid]
+      for position in current_positions[:]:  # Iterate over a copy to allow removal
+
+        # Final out exit condition
+        exit_signal_condition = (
+          (position['type'] == 'long'  and row['ext_sig'] == 1) or
+          (position['type'] == 'short' and row['ext_sig'] == -1)
+        )
+        exit_tp_condition = (
+          (position['type'] == 'long'  and position['tp'] != 0 and row['high'] >= position['tp']) or
+          (position['type'] == 'short' and position['tp'] != 0 and row['low'] <= position['tp'])
+        )
+        exit_sl_condition = (
+          (position['type'] == 'long'  and position['sl'] != 0 and row['low'] >= position['sl']) or
+          (position['type'] == 'short' and position['sl'] != 0 and row['high'] >= position['sl'])
+        )
+        if not (exit_signal_condition or exit_tp_condition or exit_sl_condition): continue
+
+        # Set exit price
+        if exit_signal_condition:
+          exit_price = row['close']
+          exit_method = 'exit signal'
+        elif exit_tp_condition:
+          exit_price = position['tp']
+          exit_method = 'hit tp'
+        elif exit_sl_condition:
+          exit_price = position['sl']
+          exit_method = 'hit sl'
+
+        # Quantity = Trade Amount * Leverage / Buy Price
+        # PnL = (Sell Price − Buy Price) × Quantity − Total Trading Costs
+        pnl = 0
+        if position['type'] == 'long':
+          pnl = (exit_price - position['entry_price']) * position['position_size'] / position['entry_price']
+        elif position['type'] == 'short':
+          pnl = (position['entry_price'] - exit_price) * position['position_size'] / position['entry_price']
+        
+        cash_available += pnl + position['amount']
+        total_invested -= position['amount']
+        trades.append({
+          'instrumentid': instrumentid,
+          'type': position['type'],
+          'entry_time': position['entry_time'],
+          'entry_price': position['entry_price'],
+          'exit_time': datetime,
+          'exit_price': exit_price,
+          'exit_method': exit_method,
+          'amount': position['amount'],
+          'pnl': pnl,
+          'portfolio': cash_available + total_invested,
+        })
+        current_positions.remove(position)
+        pnl_series.append(cash_available + total_invested - initial_amount)
+
+    # Calculate performance metrics
+    returns = pd.Series(pnl_series).pct_change().dropna()
+    sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252) if not returns.empty else np.nan
+
+    # Convert trades to DataFrame for easy analysis
+    trades_df = pd.DataFrame(trades)
+    missed_trades_df = pd.DataFrame(missed_trades)
+
+    results = {
+      'initial_amount': initial_amount,
+      'final_amount': (cash_available + total_invested).round(2),
+      'total_pnl': (cash_available + total_invested - initial_amount).round(2),
+      'sharpe_ratio': sharpe_ratio,
+      'trades': trades_df,
+      'missed_trades': missed_trades_df
+    }
+
+    trades = pd.DataFrame(trades)
+    if not trades.empty: trades = pd.DataFrame(trades).set_index(keys=['instrumentid']).sort_values(by='entry_time').round(2).replace(0, '-')
+    print('=== History ===')
+    print(trades)
+    print('\n')
+
+    print('=== My Portfolio ===')
+    flat_positions = []
+    for key, value in positions.items():
+      for item in value:
+        item['instrumentid'] = key  # Add instrumentid as a column
+        flat_positions.append(item)
+
+    flat_positions = pd.DataFrame(flat_positions)
+    if not flat_positions.empty: flat_positions = flat_positions.set_index(keys=['instrumentid']).sort_values(by='entry_time').round(2).replace(0, '-')
+    print(flat_positions)
+    print('\n')
+
+    print("=" * 100)
+    print('Backtest Result')
+    print("=" * 100)
+    print(f'initial_amount: {results['initial_amount']}')
+    print(f'final_amount:   {results['final_amount']}')
+    print(f'total_pnl:      {results['total_pnl']}')
+    print(f'sharpe_ratio:   {results['sharpe_ratio']}')
+
     return results

@@ -39,13 +39,6 @@ class Robot():
     # Create the Frame.
     self.stock_frame = StockFrame(data=data, period=self.period)
 
-    # # Clean up volume as it is None.
-    # self.stock_frame._frame.drop(
-    #   labels=['volume'],
-    #   axis=1,
-    #   inplace=True
-    # )
-
     return self.stock_frame
 
   def print_latest_stock_frame(self):
@@ -141,6 +134,7 @@ class Robot():
         candle["instrumentid"] = str(candle["instrumentid"]) + ' - ' + symbol
         parsed_date_time = datetime.strptime(candle["fromdate"], '%Y-%m-%dT%H:%M:%SZ')
         candle["fromdate"] = parsed_date_time.strftime('%Y-%m-%d %H:%M:%S')
+        del candle["volume"] 
 
       return candles
 
