@@ -265,7 +265,7 @@ class Strategies():
 
     return conditions
 
-  def backtest_strategy(self, initial_amount: int = 1000, position_pct: int = 5, leverage: int = 1) -> None:
+  def backtest_strategy(self, initial_amount: int = 1000, position_pct: int = 5, leverage: int = 1, ) -> None:
 
     # Validate position_pct
     if not (1 <= position_pct <= 100):
@@ -289,6 +289,8 @@ class Strategies():
     self._frame['ext_sig'] = self._frame.groupby('instrumentid')['ext_sig'].shift(1)
     self._frame['set_tp']  = self._frame.groupby('instrumentid')['set_tp'].shift(1)
     self._frame['set_sl']  = self._frame.groupby('instrumentid')['set_sl'].shift(1)
+    self._frame['upd_tp']  = self._frame.groupby('instrumentid')['upd_tp'].shift(1)
+    self._frame['upd_sl']  = self._frame.groupby('instrumentid')['upd_sl'].shift(1)
 
     # Initialize positions dict
     for instrumentid in self._frame.index.get_level_values('instrumentid').unique():
@@ -307,39 +309,24 @@ class Strategies():
       position_size = amount * leverage
 
       # Check for entry signals
-      if row['ent_sig'] == 1 and cash_available >= amount:
-        # Buy long
+      if row['ent_sig'] != 0 and cash_available >= amount:
+        # Buy long and short
+        type = 'long' if row['ent_sig'] == 1 else 'short'
         entry_price = row['close']
         cash_available -= amount
         total_invested += amount
         positions[instrumentid].append({
           'instrumentid': instrumentid,
-          'type': 'long',
+          'type': type,
           'entry_time': datetime,
           'entry_price': entry_price,
           'amount': amount,
           'position_size': position_size,
-          'tp': row['tp'],
-          'sl': row['sl'],
+          'tp': row['set_tp'],
+          'sl': row['set_sl'],
           'portfolio': cash_available + total_invested,
         })
-      elif row['ent_sig'] == -1 and cash_available >= amount:
-        # Buy short
-        entry_price = row['close']
-        cash_available -= amount
-        total_invested += amount
-        positions[instrumentid].append({
-          'instrumentid': instrumentid,
-          'type': 'short',
-          'entry_time': datetime,
-          'entry_price': entry_price,
-          'amount': amount,
-          'position_size': position_size,
-          'tp': row['tp'],
-          'sl': row['sl'],
-          'portfolio': cash_available + total_invested,
-        })
-      elif row['ent_sig'] != 0:
+      elif row['ent_sig'] != 0 and cash_available < amount:
         # Record missed trades
         missed_trades.append({
           'instrumentid': instrumentid,
@@ -347,9 +334,13 @@ class Strategies():
           'ent_sig': row['ent_sig']
         })
 
-      # Check for exit signals
+      # Check for update tp & sl and exit signals
       current_positions = positions[instrumentid]
       for position in current_positions[:]:  # Iterate over a copy to allow removal
+
+        # Update tp & sl
+        if row['upd_tp'] != 0: position['tp'] = row['upd_tp'] 
+        if row['upd_sl'] != 0: position['sl'] = row['upd_sl'] 
 
         # Final out exit condition
         exit_signal_condition = (

@@ -14,7 +14,8 @@ symbol_list = [
   'USDJPY',	'CHFJPY',
   'EURCAD',	'AUDJPY',
   'EURAUD',	'AUDNZD',
-  'GOLD', 'SILVER'
+  'GOLD', 
+  'SILVER'
 ]
 
 trading_robot = Robot()
