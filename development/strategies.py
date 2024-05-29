@@ -227,15 +227,19 @@ class Strategies():
     self._frame['opt_dl_trend'] = np.where((self._frame['dl_trend'] == 1)  & (self._frame['angle'] > 45), 1, 
                                   np.where((self._frame['dl_trend'] == -1) & (self._frame['angle'] < -45), -1, 0))
 
-    # signals
-    # ent_sig - get the first signal from the opt_dl_trend
-    # ext_sig - get the first signal when trend change
+    self._frame['|'] = '|'
+
+    # signals 
     self._frame['ent_sig'] = np.where(self._frame['opt_dl_trend'] == self._frame['opt_dl_trend'].diff(), self._frame['opt_dl_trend'], 0)
-    self._frame['ext_sig'] = np.where((self._frame['dl_trend'] != self._frame['dl_trend'].shift(1)) & (self._frame['dl_trend'] != 0), -self._frame['dl_trend'], 0)
+    self._frame['ext_sig'] = np.where(self._frame['opt_dl_trend'] != self._frame['opt_dl_trend'].shift(1), self._frame['opt_dl_trend'].shift(1), 0)
 
     # take profit and stop loss
-    self._frame['tp'] = 0
-    self._frame['sl'] = np.where(self._frame['ent_sig'] != 0, self._frame['ema_10'], 0)
+    self._frame['set_tp'] = 0
+    self._frame['set_sl'] = np.where(self._frame['ent_sig'] != 0, self._frame['ema_20'], 0)
+
+    # update take profit and stop loss
+    self._frame['upd_tp'] = 0
+    self._frame['upd_sl'] = 0
 
     # Clean up before sending back.
     self._frame.drop(
@@ -277,8 +281,8 @@ class Strategies():
     print('\nBacktesting strategy ==> ' + self._strategy_name + ' ...\n')
 
     # Initialize variables
-    cash_available = initial_amount
-    total_invested = 0
+    cash_available: int = initial_amount
+    total_invested: int = 0
     trades = []
     pnl_series = []
     positions = {}  # To keep track of positions by instrument
@@ -352,7 +356,7 @@ class Strategies():
           (position['type'] == 'short' and position['tp'] != 0 and row['low'] <= position['tp'])
         )
         exit_sl_condition = (
-          (position['type'] == 'long'  and position['sl'] != 0 and row['low'] >= position['sl']) or
+          (position['type'] == 'long'  and position['sl'] != 0 and row['low'] <= position['sl']) or
           (position['type'] == 'short' and position['sl'] != 0 and row['high'] >= position['sl'])
         )
         if not (exit_signal_condition or exit_tp_condition or exit_sl_condition): continue
@@ -401,11 +405,16 @@ class Strategies():
     trades_df = pd.DataFrame(trades)
     missed_trades_df = pd.DataFrame(missed_trades)
 
+    # Calculate win rate
+    winning_trades = trades_df[trades_df['pnl'] > 0]
+    win_rate = len(winning_trades) / len(trades_df) if not trades_df.empty else 0
+
     results = {
       'initial_amount': initial_amount,
-      'final_amount': (cash_available + total_invested).round(2),
-      'total_pnl': (cash_available + total_invested - initial_amount).round(2),
+      'final_amount': round(cash_available + total_invested, 2),
+      'total_pnl': round(cash_available + total_invested - initial_amount, 2),
       'sharpe_ratio': sharpe_ratio,
+      'win_rate': win_rate,
       'trades': trades_df,
       'missed_trades': missed_trades_df
     }
@@ -435,5 +444,6 @@ class Strategies():
     print(f'final_amount:   {results['final_amount']}')
     print(f'total_pnl:      {results['total_pnl']}')
     print(f'sharpe_ratio:   {results['sharpe_ratio']}')
+    print(f'win_rate:       {results["win_rate"]:.2%}')
 
     return results

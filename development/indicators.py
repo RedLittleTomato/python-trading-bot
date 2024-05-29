@@ -1047,7 +1047,7 @@ class Indicators():
 
         return self._frame
 
-    def macd(self, fast_period: int = 12, slow_period: int = 26, column_name: str = 'macd') -> pd.DataFrame:
+    def macd(self, fast_period: int = 12, slow_period: int = 26, signal_period : int = 9, column_name: str = 'macd') -> pd.DataFrame:
         """Calculates the Moving Average Convergence Divergence (MACD).
 
         Arguments:
@@ -1061,6 +1061,7 @@ class Indicators():
         Returns:
         ----
         {pd.DataFrame} -- A Pandas data frame with the MACD included.
+        macd_fast, macd_slow, macd_diff, macd
 
         Usage:
         ----
@@ -1092,12 +1093,22 @@ class Indicators():
             lambda x: x.ewm(span = slow_period, min_periods = slow_period).mean()
         )
 
-        # Calculate the difference between the fast and the slow.
-        self._frame['macd_diff'] = self._frame['macd_fast'] - self._frame['macd_slow']
+        # Calculate MACD Line
+        self._frame['macd'] = self._frame['macd_fast'] - self._frame['macd_slow']
 
-        # Calculate the Exponential moving average of the fast.
-        self._frame['macd'] = self._frame['macd_diff'].transform(
-            lambda x: x.ewm(span = 9, min_periods = 8).mean()
+        # Calculate Signal Line
+        self._frame['signal'] = self._frame['macd'].transform(
+            lambda x: x.ewm(span = signal_period, min_periods = signal_period).mean()
+        )
+
+        # Calculate Histogram
+        self._frame['macd_hist'] = self._frame['macd'] - self._frame['signal']
+
+        # Clean up before sending back.
+        self._frame.drop(
+            labels=['macd_fast', 'macd_slow'],
+            axis=1,
+            inplace=True
         )
 
         return self._frame 
