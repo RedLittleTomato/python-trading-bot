@@ -39,3 +39,6 @@ strategies.backtest_strategy(position_pct=10, leverage=1)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.precision', 6)
 # print(stock_frame.frame.replace(0, '-'))
+
+# Save dataframe to csv file
+trading_robot.convert_data_to_csv()

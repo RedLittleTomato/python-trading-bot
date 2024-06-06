@@ -1,7 +1,8 @@
+import os
 import sys
 import json
 import pytz
-import time as time_true
+import time as time
 import requests
 import pandas as pd
 
@@ -269,5 +270,21 @@ class Robot():
     # print("-" * 50)
     # print("")
 
-    time_true.sleep(10)
+    time.sleep(10)
+
+  def convert_data_to_csv(self):
+
+    # Specify folder path
+    folder_path = 'historical_candles'
+
+    # Create folder if it doesn't exist
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Define file path
+    timestamp = int(time.time())
+    file_name = f"{self.period_text}-data-{timestamp}.csv"
+    file_path = os.path.join(folder_path, file_name)
+
+    # Save DataFrame to CSV file
+    self.stock_frame.frame.to_csv(file_path)
     
