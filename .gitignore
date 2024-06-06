@@ -117,3 +117,6 @@ logs/
 
 # Sphinx documentation
 docs/_build/
+
+# CSV file
+historical_candles
