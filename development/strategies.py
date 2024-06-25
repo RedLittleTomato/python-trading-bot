@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import talib.abstract as ta
 
 from typing import Union
 
@@ -250,6 +251,40 @@ class Strategies():
 
     return self._frame
 
+  def excel_strategy(self) -> None:
+
+    # Strategy
+    self._strategy_name = 'excel_strategy'
+    self._strategy_algo = self.excel_strategy_algo()
+
+    self._indicator_client.implement_strategy(column_name=self._strategy_name, strategy=self._strategy_algo)
+  def excel_strategy_algo(self) -> pd.DataFrame:
+
+    # SMA
+    self._frame['ma'] = ta.SMA(self._frame['close'], timeperiod=50)
+
+    # Differentiation
+    self._frame['diff'] = (self._frame['close'] / self._frame['ma']) - 1
+
+    # Position
+    self._frame['position'] = np.where(self._frame['diff'] > 0.0559, 1, 0)
+
+    # Daily Pnl
+    self._frame['daily_pnl'] = self._frame['position'].shift(1) * ((self._frame['close'] / self._frame['close'].shift(1)) - 1)
+
+    # Cumulative Pnl
+    self._frame['cumulative_pnl'] = self._frame['daily_pnl'].cumsum()
+
+    # Clean up before sending back.
+    self._frame.drop(
+      labels=[],
+      axis=1,
+      inplace=True
+    )
+
+    return self._frame
+
+
   def get_strategy_signals(self) -> Union[pd.DataFrame, None]:
 
     # Grab the last rows.
@@ -269,7 +304,7 @@ class Strategies():
 
     return conditions
 
-  def backtest_strategy(self, initial_amount: int = 1000, position_pct: int = 5, leverage: int = 1, ) -> None:
+  def backtest(self, initial_amount: int = 1000, position_pct: int = 5, leverage: int = 1, ) -> None:
 
     # Validate position_pct
     if not (1 <= position_pct <= 100):
@@ -447,3 +482,31 @@ class Strategies():
     print(f'win_rate:       {results["win_rate"]:.2%}')
 
     return results
+  
+  def result(self) -> None:
+
+    # Calculate Average
+    average = self._frame['daily_pnl'].iloc[50:].mean() * 365
+
+    # Calculate Sharpe Ratio
+    sharpe_ratio = (self._frame['daily_pnl'].iloc[50:].mean() / self._frame['daily_pnl'].iloc[50:].std()) * np.sqrt(365)
+
+    # Calculate Drawdown
+    self._frame['drawdown'] = self._frame['cumulative_pnl'] - self._frame['cumulative_pnl'].rolling(window=50, min_periods=1).max()
+
+    # Calculate Max Drawdown
+    max_drawdown = self._frame['drawdown'].min() 
+
+    # Clean up before sending back.
+    self._frame.drop(
+      labels=[],
+      axis=1,
+      inplace=True
+    )
+
+    print('-' * 50)
+    print('Results')
+    print('-' * 50)
+    print(f'Average: {round(average * 100, 2)}%')
+    print(f'Sharpe Ratio: {sharpe_ratio}')
+    print(f'Max Drawdown: {round(max_drawdown * 100, 2)}%')

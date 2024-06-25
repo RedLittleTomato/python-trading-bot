@@ -274,6 +274,8 @@ class Robot():
 
   def convert_data_to_csv(self):
 
+    print("Converting data to CSV file ...")
+
     # Specify folder path
     folder_path = 'historical_candles'
 

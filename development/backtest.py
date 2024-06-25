@@ -14,22 +14,25 @@ symbol_list = [
   # 'USDJPY',	'CHFJPY',
   # 'EURCAD',	'AUDJPY',
   # 'EURAUD',	'AUDNZD',
-  'GOLD', 
-  # 'SILVER'
+  # 'GOLD', 
+  # 'SILVER'，
+  'BTC'
 ]
 
 trading_robot = Robot()
 instruments_ids = trading_robot.get_instrument_ids_by_list(symbol_list=symbol_list)
 # instruments_ids = trading_robot.get_instrument_ids_by_type(instrument_type='currencies')
-historical_candles = trading_robot.grab_historical_candles(period='4H', data_count=2000)
+historical_candles = trading_robot.grab_historical_candles(period='1D', data_count=1000)
 stock_frame = trading_robot.create_stock_frame()
 
 indicator_client = Indicators(price_data_frame=stock_frame)
 
 strategies = Strategies(price_data_frame=stock_frame, indicator_client=indicator_client)
 # strategies.ema_strategy()
-strategies.dl_strategy()
-strategies.backtest_strategy(position_pct=10, leverage=1)
+# strategies.dl_strategy()
+strategies.excel_strategy()
+# strategies.backtest(position_pct=10, leverage=1)
+strategies.result()
 
 # indicator_client.refresh()
 
@@ -41,4 +44,4 @@ pd.set_option('display.precision', 6)
 # print(stock_frame.frame.replace(0, '-'))
 
 # Save dataframe to csv file
-trading_robot.convert_data_to_csv()
+# trading_robot.convert_data_to_csv()

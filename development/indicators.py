@@ -636,7 +636,7 @@ class Indicators():
         return self._frame  
 
     # New Indicator
-    def donchian_channel(self, high_period: int = 20, low_period: int = 20, column_name: str = 'donchian_channel') -> pd.DataFrame:
+    def donchian_channel(self, length: int = 20, offset: int = 0, column_name: str = 'donchian_channel') -> pd.DataFrame:
 
         locals_data = locals()
         del locals_data['self']
@@ -647,21 +647,21 @@ class Indicators():
 
         # Calculate donchian upper channel
         self._frame['donchian_upper'] = self._price_groups['high'].transform(
-            lambda x: x.rolling(window=high_period).max()
+            lambda x: x.rolling(window=length).max()
         )
 
         # Calculate donchian lower channel
         self._frame['donchian_lower'] = self._price_groups['low'].transform(
-            lambda x: x.rolling(window=low_period).min()
+            lambda x: x.rolling(window=length).min()
         )
 
         # Calculate donchian middle channel
         self._frame['donchian_middle'] = (self._frame['donchian_upper'] + self._frame['donchian_lower']) / 2
 
         # Move donchain channel to next candle
-        self._frame['donchian_upper'] = self._frame['donchian_upper'].shift(1)
-        self._frame['donchian_lower'] = self._frame['donchian_lower'].shift(1)
-        self._frame['donchian_middle'] = self._frame['donchian_middle'].shift(1)
+        self._frame['donchian_upper'] = self._frame['donchian_upper'].shift(offset)
+        self._frame['donchian_lower'] = self._frame['donchian_lower'].shift(offset)
+        self._frame['donchian_middle'] = self._frame['donchian_middle'].shift(offset)
 
         return self._frame
 
